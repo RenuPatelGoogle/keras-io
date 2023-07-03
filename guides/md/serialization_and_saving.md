@@ -20,7 +20,7 @@ contain, and how they're connected.
 - A set of weights values (the "state of the model").
 - An optimizer (defined by compiling the model).
 - A set of losses and metrics (defined by compiling the model or calling
-`add_loss()` or `add_metric()`).
+`add_loss()`).
 
 The Keras API makes it possible to save all of these pieces to disk at once,
 or to only selectively save some of them:
@@ -134,11 +134,13 @@ reconstructed_model.fit(test_input, test_target)
 
 <div class="k-default-codeblock">
 ```
-4/4 [==============================] - 1s 7ms/step - loss: 2.9296
-4/4 [==============================] - 0s 3ms/step - loss: 2.7120
+4/4 [==============================] - 0s 1ms/step - loss: 1.8609
+INFO:tensorflow:Assets written to: my_model/assets
+4/4 [==============================] - 0s 578us/step
+4/4 [==============================] - 0s 573us/step
+4/4 [==============================] - 0s 721us/step - loss: 1.6909
 
-<keras.callbacks.History at 0x7ba64817d390>
-
+<keras.callbacks.History at 0x29e66df00>
 
 ```
 </div>
@@ -154,7 +156,8 @@ containing the following:
 
 <div class="k-default-codeblock">
 ```
-assets	keras_metadata.pb  saved_model.pb  variables
+[34massets[m[m            keras_metadata.pb [34mvariables[m[m
+fingerprint.pb    saved_model.pb
 
 ```
 </div>
@@ -180,7 +183,7 @@ and used for inference.
 Nevertheless, it is always a good practice to define the `get_config`
 and `from_config` methods when writing a custom model or layer class.
 This allows you to easily update the computation later if needed.
-See the section about [Custom objects](#custom-objects)
+See the section about [Custom objects](#custom_objects)
 for more information.
 
 Example:
@@ -190,7 +193,7 @@ Example:
 
 class CustomModel(keras.Model):
     def __init__(self, hidden_units):
-        super(CustomModel, self).__init__()
+        super().__init__()
         self.hidden_units = hidden_units
         self.dense_layers = [keras.layers.Dense(u) for u in hidden_units]
 
@@ -237,9 +240,12 @@ print("Model loaded without the custom object class:", loaded_2)
 
 <div class="k-default-codeblock">
 ```
-Original model: <__main__.CustomModel object at 0x7ba6480b96a0>
-Model Loaded with custom objects: <__main__.CustomModel object at 0x7ba648064518>
-Model loaded without the custom object class: <keras.saving.saved_model.load.CustomModel object at 0x7ba648159940>
+INFO:tensorflow:Assets written to: my_model/assets
+WARNING:tensorflow:No training configuration found in save file, so the model was *not* compiled. Compile it manually.
+WARNING:tensorflow:No training configuration found in save file, so the model was *not* compiled. Compile it manually.
+Original model: <__main__.CustomModel object at 0x17823e470>
+Model Loaded with custom objects: <__main__.CustomModel object at 0x2bf62ad10>
+Model loaded without the custom object class: <keras.saving.legacy.saved_model.load.CustomModel object at 0x2bf4e0be0>
 
 ```
 </div>
@@ -248,10 +254,10 @@ model is loaded by dynamically creating the model class that acts like the origi
 
 #### Configuring the SavedModel
 
-*New in TensoFlow 2.4*
+*New in TensorFlow 2.4*
 The argument `save_traces` has been added to `model.save`, which allows you to toggle
 SavedModel function tracing. Functions are saved to allow the Keras to re-load custom
-objects without the original class definitons, so when `save_traces=False`, all custom
+objects without the original class definitions, so when `save_traces=False`, all custom
 objects must have defined `get_config`/`from_config` methods. When loading, the custom
 objects must be passed to the `custom_objects` argument. `save_traces=False` reduces the
 disk space used by the SavedModel and saving time.
@@ -291,10 +297,12 @@ reconstructed_model.fit(test_input, test_target)
 
 <div class="k-default-codeblock">
 ```
-4/4 [==============================] - 0s 4ms/step - loss: 0.2223
-4/4 [==============================] - 0s 3ms/step - loss: 0.2035
+4/4 [==============================] - 0s 828us/step - loss: 0.2327
+4/4 [==============================] - 0s 567us/step
+4/4 [==============================] - 0s 526us/step
+4/4 [==============================] - 0s 729us/step - loss: 0.2285
 
-<keras.callbacks.History at 0x7ba6404ca588>
+<keras.callbacks.History at 0x2c8110250>
 
 ```
 </div>
@@ -316,17 +324,16 @@ must be passed to the `custom_objects` argument when loading.
 
 H5 limitations:
 
-- External losses & metrics added via `model.add_loss()`
-& `model.add_metric()` are not saved (unlike SavedModel).
+- External losses added via `model.add_loss()` are not saved (unlike SavedModel).
 If you have such losses & metrics on your model and you want to resume training,
 you need to add these losses back yourself after loading the model.
-Note that this does not apply to losses/metrics created *inside* layers via
-`self.add_loss()` & `self.add_metric()`. As long as the layer gets loaded,
+Note that this does not apply to losses/metrics created *inside* layers, e.g.
+`self.add_loss()`. As long as the layer gets loaded,
 these losses & metrics are kept, since they are part of the `call` method of the layer.
 - The *computation graph of custom objects* such as custom layers
 is not included in the saved file. At loading time, Keras will need access
 to the Python classes/functions of these objects in order to reconstruct the model.
-See [Custom objects](#custom-objects).
+See [Custom objects](#custom_objects).
 - Does not support preprocessing layers.
 
 ---
@@ -415,7 +422,7 @@ but it's completely unsafe and means your model cannot be loaded on a different 
 
 In order to save/load a model with custom-defined layers, or a subclassed model,
 you should overwrite the `get_config` and optionally `from_config` methods.
-Additionally, you should use register the custom object so that Keras is aware of it.
+Additionally, you should register the custom object so that Keras is aware of it.
 
 **Custom functions**
 
@@ -437,6 +444,13 @@ x = np.random.uniform(size=(4, 32)).astype(np.float32)
 predicted = tensorflow_graph(x).numpy()
 ```
 
+<div class="k-default-codeblock">
+```
+WARNING:tensorflow:Compiled the loaded model, but the compiled metrics have yet to be built. `model.compile_metrics` will be empty until you train or evaluate the model.
+INFO:tensorflow:Assets written to: my_model/assets
+
+```
+</div>
 Note that this method has several drawbacks:
 * For traceability reasons, you should always have access to the custom
 objects that were used. You wouldn't want to put in production a model
@@ -522,7 +536,7 @@ in section above "Defining the config methods")
 
 class CustomLayer(keras.layers.Layer):
     def __init__(self, units=32, **kwargs):
-        super(CustomLayer, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.units = units
 
     def build(self, input_shape):
@@ -539,7 +553,7 @@ class CustomLayer(keras.layers.Layer):
         return tf.matmul(inputs, self.w) + self.b
 
     def get_config(self):
-        config = super(CustomLayer, self).get_config()
+        config = super().get_config()
         config.update({"units": self.units})
         return config
 
@@ -630,10 +644,11 @@ x = keras.layers.Dense(64, activation="relu", name="dense_2")(x)
 outputs = keras.layers.Dense(10, name="predictions")(x)
 functional_model = keras.Model(inputs=inputs, outputs=outputs, name="3_layer_mlp")
 
+
 # Define a subclassed model with the same architecture
 class SubclassedModel(keras.Model):
     def __init__(self, output_dim, name=None):
-        super(SubclassedModel, self).__init__(name=name)
+        super().__init__(name=name)
         self.output_dim = output_dim
         self.dense_1 = keras.layers.Dense(64, activation="relu", name="dense_1")
         self.dense_2 = keras.layers.Dense(64, activation="relu", name="dense_2")
@@ -737,7 +752,7 @@ load_status.assert_consumed()
 
 <div class="k-default-codeblock">
 ```
-<tensorflow.python.training.tracking.util.CheckpointLoadStatus at 0x7ba6402ffbe0>
+<tensorflow.python.checkpoint.checkpoint.CheckpointLoadStatus at 0x2bf7459c0>
 
 ```
 </div>
@@ -777,8 +792,8 @@ ckpt_reader.get_variable_to_dtype_map()
 <div class="k-default-codeblock">
 ```
 {'save_counter/.ATTRIBUTES/VARIABLE_VALUE': tf.int64,
- '_CHECKPOINTABLE_OBJECT_GRAPH': tf.string,
- 'layer/var/.ATTRIBUTES/VARIABLE_VALUE': tf.int32}
+ 'layer/var/.ATTRIBUTES/VARIABLE_VALUE': tf.int32,
+ '_CHECKPOINTABLE_OBJECT_GRAPH': tf.string}
 
 ```
 </div>
@@ -900,7 +915,7 @@ Trainable params: 54,725
 Non-trainable params: 0
 _________________________________________________________________
 
-<tensorflow.python.training.tracking.util.CheckpointLoadStatus at 0x7ba6402d4e48>
+<tensorflow.python.checkpoint.checkpoint.CheckpointLoadStatus at 0x171a5f130>
 
 ```
 </div>
@@ -926,10 +941,11 @@ ckpt_path = tf.train.Checkpoint(
     dense=first_dense, kernel=last_dense.kernel, bias=last_dense.bias
 ).save("ckpt")
 
+
 # Define the subclassed model.
 class ContrivedModel(keras.Model):
     def __init__(self):
-        super(ContrivedModel, self).__init__()
+        super().__init__()
         self.first_dense = keras.layers.Dense(64)
         self.kernel = self.add_variable("kernel", shape=(64, 10))
         self.bias = self.add_variable("bias", shape=(10,))
@@ -951,7 +967,12 @@ tf.train.Checkpoint(
 
 <div class="k-default-codeblock">
 ```
-<tensorflow.python.training.tracking.util.CheckpointLoadStatus at 0x7ba6402d4b00>
+/var/folders/8n/8w8cqnvj01xd4ghznl11nyn000_93_/T/ipykernel_31296/1557690991.py:16: UserWarning: `layer.add_variable` is deprecated and will be removed in a future version. Please use the `layer.add_weight()` method instead.
+  self.kernel = self.add_variable("kernel", shape=(64, 10))
+/var/folders/8n/8w8cqnvj01xd4ghznl11nyn000_93_/T/ipykernel_31296/1557690991.py:17: UserWarning: `layer.add_variable` is deprecated and will be removed in a future version. Please use the `layer.add_weight()` method instead.
+  self.bias = self.add_variable("bias", shape=(10,))
+
+<tensorflow.python.checkpoint.checkpoint.CheckpointLoadStatus at 0x29e290220>
 
 ```
 </div>
@@ -988,7 +1009,7 @@ Note that changing `layer.trainable` may result in a different
 
 class NestedDenseLayer(keras.layers.Layer):
     def __init__(self, units, name=None):
-        super(NestedDenseLayer, self).__init__(name=name)
+        super().__init__(name=name)
         self.dense_1 = keras.layers.Dense(units, name="dense_1")
         self.dense_2 = keras.layers.Dense(units, name="dense_2")
 

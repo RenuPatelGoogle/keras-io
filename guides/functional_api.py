@@ -4,6 +4,7 @@ Author: [fchollet](https://twitter.com/fchollet)
 Date created: 2019/03/01
 Last modified: 2020/04/12
 Description: Complete guide to the functional API.
+Accelerator: GPU
 """
 """
 ## Setup
@@ -18,7 +19,7 @@ from tensorflow.keras import layers
 ## Introduction
 
 The Keras *functional API* is a way to create models that are more flexible
-than the `tf.keras.Sequential` API. The functional API can handle models
+than the `keras.Sequential` API. The functional API can handle models
 with non-linear topology, shared layers, and even multiple inputs or outputs.
 
 The main idea is that a deep learning model is usually
@@ -135,7 +136,7 @@ The `Model` class offers a built-in training loop (the `fit()` method)
 and a built-in evaluation loop (the `evaluate()` method). Note
 that you can easily [customize these loops](/guides/customizing_what_happens_in_fit/)
 to implement training routines beyond supervised learning
-(e.g. [GANs](/examples/generative/dcgan_overriding_train_step/)).
+(e.g. [GANs](https://keras.io/examples/generative/dcgan_overriding_train_step/)).
 
 Here, load the MNIST image data, reshape it into vectors,
 fit the model on the data (while monitoring performance on a validation split),
@@ -150,7 +151,7 @@ x_test = x_test.reshape(10000, 784).astype("float32") / 255
 model.compile(
     loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),
     optimizer=keras.optimizers.RMSprop(),
-    metrics=["accuracy"],
+    metrics=[keras.metrics.SparseCategoricalAccuracy()],
 )
 
 history = model.fit(x_train, y_train, batch_size=64, epochs=2, validation_split=0.2)
@@ -179,10 +180,10 @@ This saved file includes the:
 - optimizer and its state, if any (to restart training where you left off)
 """
 
-model.save("path_to_my_model")
+model.save("path_to_my_model.keras")
 del model
 # Recreate the exact same model purely from the file:
-model = keras.models.load_model("path_to_my_model")
+model = keras.models.load_model("path_to_my_model.keras")
 
 """
 For details, read the model [serialization & saving](
@@ -527,7 +528,7 @@ which is very useful for something like feature extraction.
 Let's look at an example. This is a VGG19 model with weights pretrained on ImageNet:
 """
 
-vgg19 = tf.keras.applications.VGG19()
+vgg19 = keras.applications.VGG19()
 
 """
 And these are the intermediate activations of the model,
@@ -555,7 +556,7 @@ among other things.
 """
 ## Extend the API using custom layers
 
-`tf.keras` includes a wide range of built-in layers, for example:
+`keras` includes a wide range of built-in layers, for example:
 
 - Convolutional layers: `Conv1D`, `Conv2D`, `Conv3D`, `Conv2DTranspose`
 - Pooling layers: `MaxPooling1D`, `MaxPooling2D`, `MaxPooling3D`, `AveragePooling1D`
@@ -572,13 +573,13 @@ convention since you can create weights in `__init__`, as well).
 To learn more about creating layers from scratch, read
 [custom layers and models](/guides/making_new_layers_and_models_via_subclassing) guide.
 
-The following is a basic implementation of `tf.keras.layers.Dense`:
+The following is a basic implementation of `keras.layers.Dense`:
 """
 
 
 class CustomDense(layers.Layer):
     def __init__(self, units=32):
-        super(CustomDense, self).__init__()
+        super().__init__()
         self.units = units
 
     def build(self, input_shape):
@@ -608,7 +609,7 @@ method that returns the constructor arguments of the layer instance:
 
 class CustomDense(layers.Layer):
     def __init__(self, units=32):
-        super(CustomDense, self).__init__()
+        super().__init__()
         self.units = units
 
     def build(self, input_shape):
@@ -672,7 +673,7 @@ The following properties are also true for Sequential models
 
 #### Less verbose
 
-There is no `super(MyClass, self).__init__(...)`, no `def call(self, ...):`, etc.
+There is no `super().__init__(...)`, no `def call(self, ...):`, etc.
 
 Compare:
 
@@ -689,7 +690,7 @@ With the subclassed version:
 class MLP(keras.Model):
 
   def __init__(self, **kwargs):
-    super(MLP, self).__init__(**kwargs)
+    super().__init__(**kwargs)
     self.dense_1 = layers.Dense(64, activation='relu')
     self.dense_2 = layers.Dense(10)
 
@@ -756,7 +757,7 @@ be implemented in the functional API.
 
 Choosing between the functional API or Model subclassing isn't a
 binary decision that restricts you into one category of models.
-All models in the `tf.keras` API can interact with each other, whether they're
+All models in the `keras` API can interact with each other, whether they're
 `Sequential` models, functional models, or subclassed models that are written
 from scratch.
 
@@ -777,7 +778,7 @@ model = keras.Model(inputs, outputs)
 
 class CustomRNN(layers.Layer):
     def __init__(self):
-        super(CustomRNN, self).__init__()
+        super().__init__()
         self.units = units
         self.projection_1 = layers.Dense(units=units, activation="tanh")
         self.projection_2 = layers.Dense(units=units, activation="tanh")
@@ -831,7 +832,7 @@ batch_size = 16
 
 class CustomRNN(layers.Layer):
     def __init__(self):
-        super(CustomRNN, self).__init__()
+        super().__init__()
         self.units = units
         self.projection_1 = layers.Dense(units=units, activation="tanh")
         self.projection_2 = layers.Dense(units=units, activation="tanh")

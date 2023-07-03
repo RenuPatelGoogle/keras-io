@@ -2,8 +2,9 @@
 Title: Large-scale multi-label text classification
 Author: [Sayak Paul](https://twitter.com/RisingSayak), [Soumik Rakshit](https://github.com/soumik12345)
 Date created: 2020/09/25
-Last modified: 2020/09/26
+Last modified: 2020/12/23
 Description: Implementing a large-scale multi-label text classification model.
+Accelerator: GPU
 """
 """
 ## Introduction
@@ -184,33 +185,13 @@ Notice that 50% of the abstracts have a length of 154 (you may get a different n
 based on the split). So, any number close to that value is a good enough approximate for the
 maximum sequence length.
 
-Now, we implement utilities to prepare our datasets that would go straight to the text
-classifier model.
+Now, we implement utilities to prepare our datasets.
 """
 
 max_seqlen = 150
 batch_size = 128
 padding_token = "<pad>"
 auto = tf.data.AUTOTUNE
-
-
-def unify_text_length(text, label):
-    # Split the given abstract and calculate its length.
-    word_splits = tf.strings.split(text, sep=" ")
-    sequence_length = tf.shape(word_splits)[0]
-
-    # Calculate the padding amount.
-    padding_amount = max_seqlen - sequence_length
-
-    # Check if we need to pad or truncate.
-    if padding_amount > 0:
-        unified_text = tf.pad([text], [[0, padding_amount]], constant_values="<pad>")
-        unified_text = tf.strings.reduce_join(unified_text, separator="")
-    else:
-        unified_text = tf.strings.reduce_join(word_splits[:max_seqlen], separator=" ")
-
-    # The expansion is needed for subsequent vectorization.
-    return tf.expand_dims(unified_text, -1), label
 
 
 def make_dataset(dataframe, is_train=True):
@@ -220,7 +201,6 @@ def make_dataset(dataframe, is_train=True):
         (dataframe["summaries"].values, label_binarized)
     )
     dataset = dataset.shuffle(batch_size * 10) if is_train else dataset
-    dataset = dataset.map(unify_text_length, num_parallel_calls=auto).cache()
     return dataset.batch(batch_size)
 
 
@@ -240,7 +220,7 @@ text_batch, label_batch = next(iter(train_dataset))
 
 for i, text in enumerate(text_batch[:5]):
     label = label_batch[i].numpy()[None, ...]
-    print(f"Abstract: {text[0]}")
+    print(f"Abstract: {text}")
     print(f"Label(s): {invert_multi_hot(label[0])}")
     print(" ")
 
@@ -255,9 +235,13 @@ preprocessing logic. This greatly reduces the chances of training / serving skew
 
 We first calculate the number of unique words present in the abstracts.
 """
-train_df["total_words"] = train_df["summaries"].str.split().str.len()
-vocabulary_size = train_df["total_words"].max()
-print(f"Vocabulary size: {vocabulary_size}")
+
+# Source: https://stackoverflow.com/a/18937309/7636462
+vocabulary = set()
+train_df["summaries"].str.lower().str.split().apply(vocabulary.update)
+vocabulary_size = len(vocabulary)
+print(vocabulary_size)
+
 
 """
 We now create our vectorization layer and `map()` to the `tf.data.Dataset`s created
@@ -327,17 +311,25 @@ are not disjoint. For a given abstract, we may have multiple categories. So, we 
 divide the prediction task into a series of multiple binary classification problems. This
 is also why we kept the activation function of the classification layer in our model to
 sigmoid. Researchers have used other combinations of loss function and activation
-function as well. For example, in
-[Exploring the Limits of Weakly Supervised Pretraining](https://arxiv.org/abs/1805.00932),
+function as well. For example, in [Exploring the Limits of Weakly Supervised Pretraining](https://arxiv.org/abs/1805.00932),
 Mahajan et al. used the softmax activation function and cross-entropy loss to train
 their models.
+
+There are several options of metrics that can be used in multi-label classification.
+To keep this code example narrow we decided to use the
+[binary accuracy metric](https://keras.io/api/metrics/accuracy_metrics/#binaryaccuracy-class).
+To see the explanation why this metric is used we refer to this
+[pull-request](https://github.com/keras-team/keras-io/pull/1133#issuecomment-1322736860).
+There are also other suitable metrics for multi-label classification, like
+[F1 Score](https://www.tensorflow.org/addons/api_docs/python/tfa/metrics/F1Score) or
+[Hamming loss](https://www.tensorflow.org/addons/api_docs/python/tfa/metrics/HammingLoss).
 """
 
 epochs = 20
 
 shallow_mlp_model = make_model()
 shallow_mlp_model.compile(
-    loss="binary_crossentropy", optimizer="adam", metrics=["categorical_accuracy"]
+    loss="binary_crossentropy", optimizer="adam", metrics=["binary_accuracy"]
 )
 
 history = shallow_mlp_model.fit(
@@ -357,7 +349,7 @@ def plot_result(item):
 
 
 plot_result("loss")
-plot_result("categorical_accuracy")
+plot_result("binary_accuracy")
 
 """
 While training, we notice an initial sharp fall in the loss followed by a gradual decay.
@@ -367,11 +359,11 @@ While training, we notice an initial sharp fall in the loss followed by a gradua
 ### Evaluate the model
 """
 
-_, categorical_acc = shallow_mlp_model.evaluate(test_dataset)
-print(f"Categorical accuracy on the test set: {round(categorical_acc * 100, 2)}%.")
+_, binary_acc = shallow_mlp_model.evaluate(test_dataset)
+print(f"Categorical accuracy on the test set: {round(binary_acc * 100, 2)}%.")
 
 """
-The trained model gives us an evaluation accuracy of ~87%.
+The trained model gives us an evaluation accuracy of ~99%.
 """
 
 """
@@ -400,7 +392,7 @@ predicted_probabilities = model_for_inference.predict(text_batch)
 # Perform inference.
 for i, text in enumerate(text_batch[:5]):
     label = label_batch[i].numpy()[None, ...]
-    print(f"Abstract: {text[0]}")
+    print(f"Abstract: {text}")
     print(f"Label(s): {invert_multi_hot(label[0])}")
     predicted_proba = [proba for proba in predicted_probabilities[i]]
     top_3_labels = [
@@ -426,4 +418,6 @@ even those that use Transformers ([Vaswani et al.](https://arxiv.org/abs/1706.03
 We would like to thank [Matt Watson](https://github.com/mattdangerw) for helping us
 tackle the multi-label binarization part and inverse-transforming the processed labels
 to the original form.
+
+Thanks to [Cingis Kratochvil](https://github.com/cumbalik) for suggesting and extending this code example by introducing binary accuracy as the evaluation metric.
 """

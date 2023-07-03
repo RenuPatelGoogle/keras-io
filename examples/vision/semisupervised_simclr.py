@@ -4,6 +4,7 @@ Author: [András Béres](https://www.linkedin.com/in/andras-beres-789190210)
 Date created: 2021/04/24
 Last modified: 2021/04/24
 Description: Contrastive pretraining with SimCLR for semi-supervised image classification on the STL-10 dataset.
+Accelerator: GPU
 """
 """
 ## Introduction
@@ -65,6 +66,7 @@ check out
 ## Setup
 """
 
+import math
 import matplotlib.pyplot as plt
 import tensorflow as tf
 import tensorflow_datasets as tfds
@@ -174,6 +176,11 @@ class RandomColorAffine(layers.Layer):
         self.brightness = brightness
         self.jitter = jitter
 
+    def get_config(self):
+        config = super().get_config()
+        config.update({"brightness": self.brightness, "jitter": self.jitter})
+        return config
+
     def call(self, images, training=True):
         if training:
             batch_size = tf.shape(images)[0]
@@ -197,7 +204,7 @@ class RandomColorAffine(layers.Layer):
 
 # Image augmentation module
 def get_augmenter(min_area, brightness, jitter):
-    zoom_factor = 1.0 - tf.sqrt(min_area)
+    zoom_factor = 1.0 - math.sqrt(min_area)
     return keras.Sequential(
         [
             keras.Input(shape=(image_size, image_size, image_channels)),
@@ -285,6 +292,7 @@ baseline_model.compile(
 baseline_history = baseline_model.fit(
     labeled_train_dataset, epochs=num_epochs, validation_data=test_dataset
 )
+
 print(
     "Maximal validation accuracy: {:.2f}%".format(
         max(baseline_history.history["val_acc"]) * 100
@@ -652,4 +660,7 @@ Even though they are generally more dependent on the
 [model](https://generallyintelligent.ai/understanding-self-supervised-contrastive-learning.html)
 [architecture](https://arxiv.org/abs/2010.10241), they can improve
 performance at smaller batch sizes.
+
+You can use the trained model hosted on [Hugging Face Hub](https://huggingface.co/keras-io/semi-supervised-classification-simclr)
+and try the demo on [Hugging Face Spaces](https://huggingface.co/spaces/keras-io/semi-supervised-classification).
 """

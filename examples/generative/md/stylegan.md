@@ -2,7 +2,7 @@
 
 **Author:** [Soon-Yau Cheong](https://www.linkedin.com/in/soonyau/)<br>
 **Date created:** 2021/07/01<br>
-**Last modified:** 2021/07/01<br>
+**Last modified:** 2021/12/20<br>
 **Description:** Implementation of StyleGAN for image generation.
 
 
@@ -18,23 +18,24 @@ images and to incorporate style features in the generative process.This
 [StyleGAN](https://arxiv.org/abs/1812.04948) implementation is based on the book
 [Hands-on Image Generation with TensorFlow](https://www.amazon.com/dp/1838826785).
 The code from the book's
-[Github repository](https://github.com/PacktPublishing/Hands-On-Image-Generation-with-TensorFlow-2.0/tree/master/Chapter07)
+[GitHub repository](https://github.com/PacktPublishing/Hands-On-Image-Generation-with-TensorFlow-2.0/tree/master/Chapter07)
 was refactored to leverage a custom `train_step()` to enable
 faster training time via compilation and distribution.
 
 ---
 ## Setup
 
+### Install latest TFA
+```shell
+pip install tensorflow_addons
+```
+
 
 ```python
 import os
-import random
-import math
 import numpy as np
 import matplotlib.pyplot as plt
 
-from enum import Enum
-from glob import glob
 from functools import partial
 
 import tensorflow as tf
@@ -43,7 +44,8 @@ from tensorflow.keras import layers
 from tensorflow.keras.models import Sequential
 from tensorflow_addons.layers import InstanceNormalization
 
-import tensorflow_datasets as tfds
+import gdown
+from zipfile import ZipFile
 ```
 
 ---
@@ -65,12 +67,24 @@ batch_sizes = {2: 16, 3: 16, 4: 16, 5: 16, 6: 16, 7: 8, 8: 4, 9: 2, 10: 1}
 train_step_ratio = {k: batch_sizes[2] / v for k, v in batch_sizes.items()}
 
 
-ds_train = tfds.load("celeb_a", split="train")
+os.makedirs("celeba_gan")
+
+url = "https://drive.google.com/uc?id=1O7m1010EJjLE5QxLZiM9Fpjs7Oj6e684"
+output = "celeba_gan/data.zip"
+gdown.download(url, output, quiet=True)
+
+with ZipFile("celeba_gan/data.zip", "r") as zipobj:
+    zipobj.extractall("celeba_gan")
+
+# Create a dataset from our folder, and rescale the images to the [0-1] range:
+
+ds_train = keras.utils.image_dataset_from_directory(
+    "celeba_gan", label_mode=None, image_size=(64, 64), batch_size=32
+)
 
 
-def resize_image(res, sample):
-    image = sample["image"]
-    # only donwsampling, so use nearest neighbor that is faster to run
+def resize_image(res, image):
+    # only downsampling, so use nearest neighbor that is faster to run
     image = tf.image.resize(
         image, (res, res), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR
     )
@@ -80,9 +94,12 @@ def resize_image(res, sample):
 
 def create_dataloader(res):
     batch_size = batch_sizes[log2(res)]
-    dl = ds_train.map(partial(resize_image, res), num_parallel_calls=tf.data.AUTOTUNE)
+    # NOTE: we unbatch the dataset so we can `batch()` it again with the `drop_remainder=True` option
+    # since the model only supports a single batch size
+    dl = ds_train.map(partial(resize_image, res), num_parallel_calls=tf.data.AUTOTUNE).unbatch()
     dl = dl.shuffle(200).batch(batch_size, drop_remainder=True).prefetch(1).repeat()
     return dl
+
 
 ```
 
@@ -148,7 +165,7 @@ def minibatch_std(input_tensor, epsilon=1e-8):
 
 class EqualizedConv(layers.Layer):
     def __init__(self, out_channels, kernel=3, gain=2, **kwargs):
-        super(EqualizedConv, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.kernel = kernel
         self.out_channels = out_channels
         self.gain = gain
@@ -182,7 +199,7 @@ class EqualizedConv(layers.Layer):
 
 class EqualizedDense(layers.Layer):
     def __init__(self, units, gain=2, learning_rate_multiplier=1, **kwargs):
-        super(EqualizedDense, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.units = units
         self.gain = gain
         self.learning_rate_multiplier = learning_rate_multiplier
@@ -225,7 +242,7 @@ class AddNoise(layers.Layer):
 
 class AdaIN(layers.Layer):
     def __init__(self, gain=1, **kwargs):
-        super(AdaIN, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.gain = gain
 
     def build(self, input_shapes):
@@ -476,7 +493,7 @@ class Discriminator:
 
 class StyleGAN(tf.keras.Model):
     def __init__(self, z_dim=512, target_res=64, start_res=4):
-        super(StyleGAN, self).__init__()
+        super().__init__()
         self.z_dim = z_dim
 
         self.target_res_log2 = log2(target_res)
@@ -518,7 +535,7 @@ class StyleGAN(tf.keras.Model):
         self.phase = phase
         self.d_loss_metric = keras.metrics.Mean(name="d_loss")
         self.g_loss_metric = keras.metrics.Mean(name="g_loss")
-        super(StyleGAN, self).compile(*args, **kwargs)
+        super().compile(*args, **kwargs)
 
     @property
     def metrics(self):
@@ -655,9 +672,9 @@ TARGET_RES = 128
 style_gan = StyleGAN(start_res=START_RES, target_res=TARGET_RES)
 ```
 
-The training for each new resolution happen in two phases - "transition" and "stable".
+The training for each new resolution happens in two phases - "transition" and "stable".
 In the transition phase, the features from the previous resolution are mixed with the
-current resolution. This allows for a smoother transition when scalling up. We use each
+current resolution. This allows for a smoother transition when scaling up. We use each
 epoch in `model.fit()` as a phase.
 
 
@@ -689,8 +706,8 @@ def train(
             steps = int(train_step_ratio[res_log2] * steps_per_epoch)
 
             style_gan.compile(
-                d_optimizer=tf.keras.optimizers.Adam(**opt_cfg),
-                g_optimizer=tf.keras.optimizers.Adam(**opt_cfg),
+                d_optimizer=tf.keras.optimizers.legacy.Adam(**opt_cfg),
+                g_optimizer=tf.keras.optimizers.legacy.Adam(**opt_cfg),
                 loss_weights={"gradient_penalty": 10, "drift": 0.001},
                 steps_per_epoch=steps,
                 res=res,
@@ -727,26 +744,16 @@ train(start_res=4, target_res=16, steps_per_epoch=1, display_images=False)
 ```
 
     
-<div class="k-default-codeblock">
 ```
 Model resolution:4x4
 STABLE
 1/1 [==============================] - 3s 3s/step - d_loss: 2.0971 - g_loss: 2.5965
-```
-</div>
-    
-<div class="k-default-codeblock">
-```
 Model resolution:8x8
 TRANSITION
 1/1 [==============================] - 5s 5s/step - d_loss: 6.6954 - g_loss: 0.3432
 STABLE
 1/1 [==============================] - 4s 4s/step - d_loss: 3.3558 - g_loss: 3.7813
-```
-</div>
-    
-<div class="k-default-codeblock">
-```
+
 Model resolution:16x16
 TRANSITION
 1/1 [==============================] - 10s 10s/step - d_loss: 3.3166 - g_loss: 6.6047
@@ -758,7 +765,7 @@ WARNING:tensorflow:5 out of the last 5 calls to <function Model.make_train_funct
 1/1 [==============================] - 8s 8s/step - d_loss: -6.1128 - g_loss: 17.0095
 
 ```
-</div>
+
 ---
 ## Results
 
@@ -790,12 +797,10 @@ images = style_gan({"style_code": w, "noise": noise, "alpha": 1.0})
 plot_images(images, 5)
 ```
 
-<div class="k-default-codeblock">
 ```
 Downloading data from https://github.com/soon-yau/stylegan_keras/releases/download/keras_example_v1.0/stylegan_128x128.ckpt.zip
 540540928/540534982 [==============================] - 30s 0us/step
 ```
-</div>
 
     
 ![png](/img/examples/generative/stylegan/stylegan_21_4.png)
@@ -822,12 +827,10 @@ plt.axis("off")
 
 
 
-<div class="k-default-codeblock">
 ```
 (-0.5, 383.5, 127.5, -0.5)
 
 ```
-</div>
     
 ![png](/img/examples/generative/stylegan/stylegan_23_1.png)
     

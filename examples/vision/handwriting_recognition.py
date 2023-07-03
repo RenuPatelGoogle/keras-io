@@ -4,6 +4,7 @@ Authors: [A_K_Nain](https://twitter.com/A_K_Nain), [Sayak Paul](https://twitter.
 Date created: 2021/08/16
 Last modified: 2021/08/16
 Description: Training a handwriting recognition model with variable-length sequences.
+Accelerator: GPU
 """
 """
 ## Introduction
@@ -104,7 +105,7 @@ base_image_path = os.path.join(base_path, "words")
 def get_image_paths_and_labels(samples):
     paths = []
     corrected_samples = []
-    for (i, file_line) in enumerate(samples):
+    for i, file_line in enumerate(samples):
         line_split = file_line.strip()
         line_split = line_split.split(" ")
 
@@ -144,6 +145,8 @@ for label in train_labels:
     max_len = max(max_len, len(label))
     train_labels_cleaned.append(label)
 
+characters = sorted(list(characters))
+
 print("Maximum length: ", max_len)
 print("Vocab size: ", len(characters))
 
@@ -170,7 +173,7 @@ test_labels_cleaned = clean_labels(test_labels)
 ### Building the character vocabulary
 
 Keras provides different preprocessing layers to deal with different modalities of data.
-[This guide](https://keras.io/guides/preprocessing_layers/) provids a comprehensive introduction.
+[This guide](https://keras.io/guides/preprocessing_layers/) provides a comprehensive introduction.
 Our example involves preprocessing labels at the character
 level. This means that if there are two labels, e.g. "cat" and "dog", then our character
 vocabulary should be {a, c, d, g, o, t} (without any special tokens). We use the

@@ -2,8 +2,9 @@
 Title: Training & evaluation with the built-in methods
 Author: [fchollet](https://twitter.com/fchollet)
 Date created: 2019/03/01
-Last modified: 2020/04/13
+Last modified: 2023/03/20
 Description: Complete guide to training & evaluation with `fit()` and `evaluate()`.
+Accelerator: GPU
 """
 
 
@@ -43,7 +44,7 @@ This guide doesn't cover distributed training, which is covered in our
 ## API overview: a first end-to-end example
 
 When passing data to the built-in training loops of a model, you should either use
-**NumPy arrays** (if your data is small and fits in memory) or **`tf.data Dataset`
+**NumPy arrays** (if your data is small and fits in memory) or **`tf.data.Dataset`
 objects**. In the next few paragraphs, we'll use the MNIST dataset as NumPy arrays, in
 order to demonstrate how to use optimizers, losses, and metrics.
 
@@ -228,7 +229,7 @@ Metrics:
 """
 ### Custom losses
 
-If you need to create a custom loss, Keras provides two ways to do so.
+If you need to create a custom loss, Keras provides three ways to do so.
 
 The first method involves creating a function that accepts inputs `y_true` and
 `y_pred`. The following example shows a loss function that computes the mean squared
@@ -237,7 +238,7 @@ error between the real data and the predictions:
 
 
 def custom_mean_squared_error(y_true, y_pred):
-    return tf.math.reduce_mean(tf.square(y_true - y_pred))
+    return tf.math.reduce_mean(tf.square(y_true - y_pred), axis=-1)
 
 
 model = get_uncompiled_model()
@@ -249,7 +250,7 @@ model.fit(x_train, y_train_one_hot, batch_size=64, epochs=1)
 
 """
 If you need a loss function that takes in parameters beside `y_true` and `y_pred`, you
-can subclass the `tf.keras.losses.Loss` class and implement the following two methods:
+can subclass the `keras.losses.Loss` class and implement the following two methods:
 
 - `__init__(self)`: accept parameters to pass during the call of your loss function
 - `call(self, y_true, y_pred)`: use the targets (y_true) and the model predictions
@@ -271,8 +272,8 @@ class CustomMSE(keras.losses.Loss):
         self.regularization_factor = regularization_factor
 
     def call(self, y_true, y_pred):
-        mse = tf.math.reduce_mean(tf.square(y_true - y_pred))
-        reg = tf.math.reduce_mean(tf.square(0.5 - y_pred))
+        mse = tf.math.reduce_mean(tf.square(y_true - y_pred), axis=-1)
+        reg = tf.math.reduce_mean(tf.square(0.5 - y_pred), axis=-1)
         return mse + reg * self.regularization_factor
 
 
@@ -286,7 +287,7 @@ model.fit(x_train, y_train_one_hot, batch_size=64, epochs=1)
 ### Custom metrics
 
 If you need a metric that isn't part of the API, you can easily create custom metrics
-by subclassing the `tf.keras.metrics.Metric` class. You will need to implement 4
+by subclassing the `keras.metrics.Metric` class. You will need to implement 4
 methods:
 
 - `__init__(self)`, in which you will create state variables for your metric.
@@ -306,7 +307,7 @@ that counts how many samples were correctly classified as belonging to a given c
 
 class CategoricalTruePositives(keras.metrics.Metric):
     def __init__(self, name="categorical_true_positives", **kwargs):
-        super(CategoricalTruePositives, self).__init__(name=name, **kwargs)
+        super().__init__(name=name, **kwargs)
         self.true_positives = self.add_weight(name="ctp", initializer="zeros")
 
     def update_state(self, y_true, y_pred, sample_weight=None):
@@ -376,88 +377,24 @@ model.compile(
 model.fit(x_train, y_train, batch_size=64, epochs=1)
 
 """
-You can do the same for logging metric values, using `add_metric()`:
-"""
-
-
-class MetricLoggingLayer(layers.Layer):
-    def call(self, inputs):
-        # The `aggregation` argument defines
-        # how to aggregate the per-batch values
-        # over each epoch:
-        # in this case we simply average them.
-        self.add_metric(
-            keras.backend.std(inputs), name="std_of_activation", aggregation="mean"
-        )
-        return inputs  # Pass-through layer.
-
-
-inputs = keras.Input(shape=(784,), name="digits")
-x = layers.Dense(64, activation="relu", name="dense_1")(inputs)
-
-# Insert std logging as a layer.
-x = MetricLoggingLayer()(x)
-
-x = layers.Dense(64, activation="relu", name="dense_2")(x)
-outputs = layers.Dense(10, name="predictions")(x)
-
-model = keras.Model(inputs=inputs, outputs=outputs)
-model.compile(
-    optimizer=keras.optimizers.RMSprop(learning_rate=1e-3),
-    loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-)
-model.fit(x_train, y_train, batch_size=64, epochs=1)
-
-"""
-In the [Functional API](/guides/functional_api/),
-you can also call `model.add_loss(loss_tensor)`,
-or `model.add_metric(metric_tensor, name, aggregation)`.
-
-Here's a simple example:
-"""
-
-inputs = keras.Input(shape=(784,), name="digits")
-x1 = layers.Dense(64, activation="relu", name="dense_1")(inputs)
-x2 = layers.Dense(64, activation="relu", name="dense_2")(x1)
-outputs = layers.Dense(10, name="predictions")(x2)
-model = keras.Model(inputs=inputs, outputs=outputs)
-
-model.add_loss(tf.reduce_sum(x1) * 0.1)
-
-model.add_metric(keras.backend.std(x1), name="std_of_activation", aggregation="mean")
-
-model.compile(
-    optimizer=keras.optimizers.RMSprop(1e-3),
-    loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-)
-model.fit(x_train, y_train, batch_size=64, epochs=1)
-
-"""
 Note that when you pass losses via `add_loss()`, it becomes possible to call
 `compile()` without a loss function, since the model already has a loss to minimize.
 
 Consider the following `LogisticEndpoint` layer: it takes as inputs
-targets & logits, and it tracks a crossentropy loss via `add_loss()`. It also
-tracks classification accuracy via `add_metric()`.
+targets & logits, and it tracks a crossentropy loss via `add_loss()`.
 """
 
 
 class LogisticEndpoint(keras.layers.Layer):
     def __init__(self, name=None):
-        super(LogisticEndpoint, self).__init__(name=name)
+        super().__init__(name=name)
         self.loss_fn = keras.losses.BinaryCrossentropy(from_logits=True)
-        self.accuracy_fn = keras.metrics.BinaryAccuracy()
 
     def call(self, targets, logits, sample_weights=None):
         # Compute the training-time loss value and add it
         # to the layer using `self.add_loss()`.
         loss = self.loss_fn(targets, logits, sample_weights)
         self.add_loss(loss)
-
-        # Log accuracy as a metric and add it
-        # to the layer using `self.add_metric()`.
-        acc = self.accuracy_fn(targets, logits, sample_weights)
-        self.add_metric(acc, name="accuracy")
 
         # Return the inference-time prediction tensor (for `.predict()`).
         return tf.nn.softmax(logits)
@@ -473,7 +410,7 @@ import numpy as np
 inputs = keras.Input(shape=(3,), name="inputs")
 targets = keras.Input(shape=(10,), name="targets")
 logits = keras.layers.Dense(10)(inputs)
-predictions = LogisticEndpoint(name="predictions")(logits, targets)
+predictions = LogisticEndpoint(name="predictions")(targets, logits)
 
 model = keras.Model(inputs=[inputs, targets], outputs=predictions)
 model.compile(optimizer="adam")  # No loss argument!
@@ -1065,7 +1002,7 @@ callbacks = [
         # the current checkpoint if and only if
         # the `val_loss` score has improved.
         # The saved model name will include the current epoch.
-        filepath="mymodel_{epoch}",
+        filepath="mymodel_{epoch}.keras",
         save_best_only=True,  # Only save a model if `val_loss` has improved.
         monitor="val_loss",
         verbose=1,
@@ -1103,10 +1040,10 @@ def make_or_restore_model():
 
 model = make_or_restore_model()
 callbacks = [
-    # This callback saves a SavedModel every 100 batches.
+    # This callback saves the model every 100 batches.
     # We include the training loss in the saved model name.
     keras.callbacks.ModelCheckpoint(
-        filepath=checkpoint_dir + "/ckpt-loss={loss:.2f}", save_freq=100
+        filepath=checkpoint_dir + "/model-loss={loss:.2f}.keras", save_freq=100
     )
 ]
 model.fit(x_train, y_train, epochs=1, callbacks=callbacks)

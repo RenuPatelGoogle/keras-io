@@ -4,6 +4,7 @@ Authors: Scott Zhu, Francois Chollet
 Date created: 2019/07/16
 Last modified: 2020/04/14
 Description: Complete guide to using mask-aware sequence layers in Keras.
+Accelerator: None
 """
 """
 ## Setup
@@ -58,7 +59,7 @@ than the longest item need to be padded with some placeholder value (alternative
 one might also truncate long samples before padding short samples).
 
 Keras provides a utility function to truncate and pad Python lists to a common length:
-`tf.keras.preprocessing.sequence.pad_sequences`.
+`tf.keras.utils.pad_sequences`.
 """
 
 raw_inputs = [
@@ -69,14 +70,12 @@ raw_inputs = [
 
 # By default, this will pad using 0s; it is configurable via the
 # "value" parameter.
-# Note that you could "pre" padding (at the beginning) or
+# Note that you could use "pre" padding (at the beginning) or
 # "post" padding (at the end).
 # We recommend using "post" padding when working with RNN layers
 # (in order to be able to use the
 # CuDNN implementation of the layers).
-padded_inputs = tf.keras.preprocessing.sequence.pad_sequences(
-    raw_inputs, padding="post"
-)
+padded_inputs = tf.keras.utils.pad_sequences(raw_inputs, padding="post")
 print(padded_inputs)
 
 
@@ -136,7 +135,10 @@ receive a mask, which means it will ignore padded values:
 """
 
 model = keras.Sequential(
-    [layers.Embedding(input_dim=5000, output_dim=16, mask_zero=True), layers.LSTM(32),]
+    [
+        layers.Embedding(input_dim=5000, output_dim=16, mask_zero=True),
+        layers.LSTM(32),
+    ]
 )
 
 """
@@ -168,7 +170,7 @@ to the `__call__` method of a mask-consuming layer, like this:
 
 class MyLayer(layers.Layer):
     def __init__(self, **kwargs):
-        super(MyLayer, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.embedding = layers.Embedding(input_dim=5000, output_dim=16, mask_zero=True)
         self.lstm = layers.LSTM(32)
 
@@ -234,7 +236,7 @@ mask from input values:
 
 class CustomEmbedding(keras.layers.Layer):
     def __init__(self, input_dim, output_dim, mask_zero=False, **kwargs):
-        super(CustomEmbedding, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.mask_zero = mask_zero
@@ -290,7 +292,7 @@ Here's an example of a layer that is whitelisted for mask propagation:
 
 class MyActivation(keras.layers.Layer):
     def __init__(self, **kwargs):
-        super(MyActivation, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         # Signal that the layer is safe for mask propagation
         self.supports_masking = True
 
@@ -331,7 +333,9 @@ class TemporalSoftmax(keras.layers.Layer):
     def call(self, inputs, mask=None):
         broadcast_float_mask = tf.expand_dims(tf.cast(mask, "float32"), -1)
         inputs_exp = tf.exp(inputs) * broadcast_float_mask
-        inputs_sum = tf.reduce_sum(inputs_exp * broadcast_float_mask, axis=-1, keepdims=True)
+        inputs_sum = tf.reduce_sum(
+            inputs_exp * broadcast_float_mask, axis=-1, keepdims=True
+        )
         return inputs_exp / inputs_sum
 
 

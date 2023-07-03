@@ -4,14 +4,15 @@ Author: [fchollet](https://twitter.com/fchollet)
 Date created: 2019/03/20
 Last modified: 2020/04/20
 Description: Image segmentation model trained from scratch on the Oxford Pets dataset.
+Accelerator: GPU
 """
 """
 ## Download the data
 """
 
 """shell
-curl -O https://www.robots.ox.ac.uk/~vgg/data/pets/data/images.tar.gz
-curl -O https://www.robots.ox.ac.uk/~vgg/data/pets/data/annotations.tar.gz
+curl -O https://thor.robots.ox.ac.uk/~vgg/data/pets/images.tar.gz
+curl -O https://thor.robots.ox.ac.uk/~vgg/data/pets/annotations.tar.gz
 tar -xf images.tar.gz
 tar -xf annotations.tar.gz
 """
@@ -53,15 +54,14 @@ for input_path, target_path in zip(input_img_paths[:10], target_img_paths[:10]):
 """
 
 from IPython.display import Image, display
-from tensorflow.keras.preprocessing.image import load_img
-import PIL
+from tensorflow.keras.utils import load_img
 from PIL import ImageOps
 
 # Display input image #7
 display(Image(filename=input_img_paths[9]))
 
 # Display auto-contrast version of corresponding target (per-pixel categories)
-img = PIL.ImageOps.autocontrast(load_img(target_img_paths[9]))
+img = ImageOps.autocontrast(load_img(target_img_paths[9]))
 display(img)
 
 """
@@ -70,7 +70,7 @@ display(img)
 
 from tensorflow import keras
 import numpy as np
-from tensorflow.keras.preprocessing.image import load_img
+from tensorflow.keras.utils import load_img
 
 
 class OxfordPets(keras.utils.Sequence):
@@ -118,7 +118,6 @@ def get_model(img_size, num_classes):
     # Entry block
     x = layers.Conv2D(32, 3, strides=2, padding="same")(inputs)
     x = layers.BatchNormalization()(x)
-    x = layers.Activation("relu")(x)
 
     previous_block_activation = x  # Set aside residual
 
@@ -227,7 +226,7 @@ def display_mask(i):
     """Quick utility to display a model's prediction."""
     mask = np.argmax(val_preds[i], axis=-1)
     mask = np.expand_dims(mask, axis=-1)
-    img = PIL.ImageOps.autocontrast(keras.preprocessing.image.array_to_img(mask))
+    img = ImageOps.autocontrast(keras.utils.array_to_img(mask))
     display(img)
 
 
@@ -238,7 +237,7 @@ i = 10
 display(Image(filename=val_input_img_paths[i]))
 
 # Display ground-truth target mask
-img = PIL.ImageOps.autocontrast(load_img(val_target_img_paths[i]))
+img = ImageOps.autocontrast(load_img(val_target_img_paths[i]))
 display(img)
 
 # Display mask predicted by our model
